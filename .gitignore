@@ -1,0 +1,33 @@
+# Backend (Spring Boot)
+backend/target/
+backend/*.jar
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+
+# Frontend (React)
+frontend/node_modules/
+frontend/build/
+
+# Python
+python/venv/
+python/__pycache__/
+python/*.pyc
+python/*.pyo
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+.env.local
+
+# Claude Code
+.claude/
