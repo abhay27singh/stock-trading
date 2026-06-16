@@ -24,17 +24,26 @@ const buildCandles = (data, bucketSeconds = 60) => {
   return Object.values(buckets).sort((a, b) => a.time - b.time);
 };
 
+const pickBucket = (data) => {
+  const span = data[data.length - 1].time - data[0].time;
+  if (span > 86400) return 900;
+  if (span > 14400) return 300;
+  if (span > 3600) return 120;
+  if (span < 120) return 10;
+  if (span < 600) return 30;
+  return 60;
+};
+
 const TradingChart = ({ data, height = 420 }) => {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
+  const candleSeriesRef = useRef(null);
+  const lineSeriesRef = useRef(null);
+  const fittedRef = useRef(false);
 
+  // Create the chart once
   useEffect(() => {
-    if (!chartContainerRef.current || !data || data.length === 0) return;
-
-    if (chartRef.current) {
-      chartRef.current.remove();
-      chartRef.current = null;
-    }
+    if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
@@ -66,46 +75,6 @@ const TradingChart = ({ data, height = 420 }) => {
       },
     });
 
-    // Determine candle bucket size based on data timespan
-    const span = data[data.length - 1].time - data[0].time;
-    let bucket = 60; // 1-min default
-    if (span > 86400) bucket = 900;      // >1day => 15-min candles
-    else if (span > 14400) bucket = 300;  // >4hr => 5-min candles
-    else if (span > 3600) bucket = 120;   // >1hr => 2-min candles
-    else if (span < 120) bucket = 10;     // <2min => 10-sec candles (fresh data)
-    else if (span < 600) bucket = 30;     // <10min => 30-sec candles
-
-    const candles = buildCandles(data, bucket);
-
-    if (candles.length >= 1) {
-      // Candlestick chart
-      const candleSeries = chart.addSeries(CandlestickSeries, {
-        upColor: '#22c55e',
-        downColor: '#ef4444',
-        borderDownColor: '#ef4444',
-        borderUpColor: '#22c55e',
-        wickDownColor: '#ef4444',
-        wickUpColor: '#22c55e',
-      });
-      candleSeries.setData(candles);
-    } else {
-      // Fallback to line if not enough candles
-      const lineSeries = chart.addSeries(LineSeries, {
-        color: '#22c55e',
-        lineWidth: 2,
-      });
-      const seen = new Set();
-      const uniqueData = [];
-      for (const point of data) {
-        if (!seen.has(point.time)) {
-          seen.add(point.time);
-          uniqueData.push({ time: point.time, value: point.price });
-        }
-      }
-      lineSeries.setData(uniqueData);
-    }
-
-    chart.timeScale().fitContent();
     chartRef.current = chart;
 
     const handleResize = () => {
@@ -120,9 +89,57 @@ const TradingChart = ({ data, height = 420 }) => {
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
+        candleSeriesRef.current = null;
+        lineSeriesRef.current = null;
+        fittedRef.current = false;
       }
     };
-  }, [data, height]);
+  }, [height]);
+
+  // Update series data without recreating the chart — preserves zoom/pan
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !data || data.length === 0) return;
+
+    const bucket = pickBucket(data);
+    const candles = buildCandles(data, bucket);
+
+    if (candles.length >= 1) {
+      if (!candleSeriesRef.current) {
+        candleSeriesRef.current = chart.addSeries(CandlestickSeries, {
+          upColor: '#22c55e',
+          downColor: '#ef4444',
+          borderDownColor: '#ef4444',
+          borderUpColor: '#22c55e',
+          wickDownColor: '#ef4444',
+          wickUpColor: '#22c55e',
+        });
+      }
+      candleSeriesRef.current.setData(candles);
+    } else {
+      if (!lineSeriesRef.current) {
+        lineSeriesRef.current = chart.addSeries(LineSeries, {
+          color: '#22c55e',
+          lineWidth: 2,
+        });
+      }
+      const seen = new Set();
+      const uniqueData = [];
+      for (const point of data) {
+        if (!seen.has(point.time)) {
+          seen.add(point.time);
+          uniqueData.push({ time: point.time, value: point.price });
+        }
+      }
+      lineSeriesRef.current.setData(uniqueData);
+    }
+
+    // Only auto-fit on the first data load; afterwards keep the user's zoom.
+    if (!fittedRef.current) {
+      chart.timeScale().fitContent();
+      fittedRef.current = true;
+    }
+  }, [data]);
 
   return (
     <div

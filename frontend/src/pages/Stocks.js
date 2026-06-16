@@ -33,8 +33,8 @@ const Stocks = () => {
     }
   };
 
-  const fetchHistory = useCallback(async (symbol) => {
-    setChartLoading(true);
+  const fetchHistory = useCallback(async (symbol, { showSpinner = false } = {}) => {
+    if (showSpinner) setChartLoading(true);
     try {
       const res = await stockService.getHistory(symbol);
       const formatted = (res.data || [])
@@ -63,13 +63,22 @@ const Stocks = () => {
       console.error(err);
       setHistory([]);
     } finally {
-      setChartLoading(false);
+      if (showSpinner) setChartLoading(false);
     }
   }, []);
 
+  // Refresh the candle chart while a stock is selected
+  useEffect(() => {
+    if (!selectedStock) return;
+    const interval = setInterval(() => {
+      fetchHistory(selectedStock.symbol);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [selectedStock, fetchHistory]);
+
   const handleSelect = (stock) => {
     setSelectedStock(stock);
-    fetchHistory(stock.symbol);
+    fetchHistory(stock.symbol, { showSpinner: true });
   };
 
   const handleTrade = async (type) => {
